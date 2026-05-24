@@ -4,7 +4,7 @@
 
 | 날짜 | 주제 | 결정 요약 | 상세 링크 |
 |------|------|-----------|-----------|
-| YYYY-MM-DD | (예시) auth-redesign | 세션 토큰을 Redis 로 이전 | [link](../topics/auth-redesign/minutes/YYYY-MM-DD.md) |
+| 2026-05-25 | docker-swarm-vs-k8s | ECS Fargate 채택 (정부지원금 가산점 앱) | [ADR-0001](../topics/docker-swarm-vs-k8s/artifacts/ADR-0001-ECS-Fargate-채택.md) |
 
 ## 작성 규칙
 - 결정이 **확정** 된 경우에만 등재 (잠정 합의는 등재하지 않음)
