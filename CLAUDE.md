@@ -34,6 +34,46 @@
 - 사용자가 *"X 주제에 이어서"* 등으로 기존 폴더를 명시 → 그 폴더로 진입
 - 그 외에는 **항상 자동 생성**. 사용자가 후회하면 폴더는 옮기거나 합치면 됨 — 마찰을 만들지 않는다
 
+## ⚠️ 주제 전문가 자동 생성 (3턴 룰)
+
+주제 폴더가 만들어진 후, 사용자와 주치의(메인 Claude) 사이의 **자유 대화가 3턴(사용자 발화 기준 3개)** 누적되는 응답 직후, 주치의는 그 주제의 **전문 페르소나**를 자동으로 생성한다. 묻지 않는다. 만든다.
+
+이 페르소나는 일반 페르소나(critic, analyst 등)와 달리 **그 주제 하나에만 깊은 도메인 전문성**을 갖는다. 협진·토론에서 사실 검증·심층 설명이 필요할 때 우선적으로 호출된다.
+
+### 동작 규칙
+
+1. **트리거**: `chat.md` 에 사용자 발화가 3개째 누적되는 응답 직후
+2. **생성 위치**: `topics/<slug>/.claude/agents/<expert-slug>.md` (해당 주제 폴더 전용)
+3. **이름 규칙**: 주제·역할을 직접 반영하는 slug — `aws-expert`, `java-champion`, `spring-architect`, `kubernetes-sme` 등
+4. **모델**: 기본 `opus` (도메인 깊이가 필요. 라이트한 조회면 `sonnet`도 가능)
+5. **알림**: 그 응답 마지막 줄에 한 번만 — *"주제 전문가 `<expert-slug>` 만들었어요. 협진/토론에서 호출 가능합니다."*
+
+### 전문성 요건 (페르소나 정의에 반드시 포함)
+
+이 페르소나는 일반 검색·요약이 아니라 **그 분야의 권위 있는 전문가의 시각**으로 답해야 한다. 정의 파일에 다음을 명시:
+
+- **1차 자료원**: 공식 docs, 표준 스펙(JEP/RFC/PEP/JSR), 소스 코드, 메일링 리스트
+- **권위 있는 2차 자료**: 공식 best practice 가이드, 권위 컨퍼런스 발표(re:Invent, JavaOne/Devoxx, KubeCon, SpringOne, PyCon 등), 핵심 인물의 글·인터뷰
+- **실 사례·case study**: 대규모 프로덕션 적용 사례·post-mortem
+- **사고방식 모사**: "AWS Hero / Solutions Architect처럼", "Java Champion(Brian Goetz·Doug Lea급)처럼", "Kubernetes maintainer처럼" — 그 분야 최상위 전문가의 시각·어휘·판단 기준을 따른다
+- **불확실성 표기**: 추측·일반론은 명시적으로 표기하고, 1차 자료로 뒷받침되지 않는 주장은 그렇게 알린다
+
+### 예시
+
+| 주제 | expert-slug | 1차/2차 자료 | 사고방식 |
+|------|-------------|--------------|----------|
+| AWS 로그 아키텍처 | `aws-expert` | AWS 공식 docs · Well-Architected Framework · AWS Prescriptive Guidance / re:Invent 세션 · AWS Architecture Blog · AWS Heroes | AWS Solutions Architect / Hero |
+| Java 동시성·언어 기능 | `java-champion` | JLS · JEP · OpenJDK 메일링 / Brian Goetz·Doug Lea 발표·논문 · Devoxx | Java Champion |
+| Spring Boot 업그레이드 | `spring-architect` | Spring 공식 docs · Migration Guide · Spring Blog / SpringOne 발표 | Spring 코어 커미터 |
+| Kubernetes 운영 | `k8s-sme` | k8s 공식 docs · KEP · upstream 소스 / KubeCon 발표 · SIG 메일링 | k8s maintainer |
+
+### 예외
+
+- 사용자가 *"전문가 만들지 마"*, *"그냥 답만"* 등 명시 → 생성 생략
+- 3턴 시점에 주제가 여전히 모호 → 명확해질 때까지 미룬다 (어설프게 만드는 것보다 미루는 게 낫다)
+- 이미 `topics/<slug>/.claude/agents/` 에 적절한 전문가가 있음 → 재생성하지 않고 그것을 사용
+- 주제가 분명히 한 도메인에 속하지 않고 메타·잡담성이라 판단되면 생략
+
 ## 정신 모델: 다학제 진료
 
 이 회의실의 동작은 **병원의 다학제 진료(MDT)** 와 같은 흐름을 따릅니다.
@@ -162,8 +202,11 @@ meeting-room/
 | advocate | 제안 옹호·실행안 구체화 | sonnet |
 | researcher | 외부 정보·문서 조사 | haiku |
 | synthesizer | 의견 통합, 결론 도출 | opus |
+| `<주제>-expert` (자동 생성) | 그 주제의 도메인 전문가 — 공식 자료·권위 자료·실사례에 기반해 답변 | opus 기본 |
 
 페르소나 동시 소환 시 독립적인 의견을 받기 위해 **단일 메시지에서 병렬로** 호출합니다.
+
+주제 전문가는 일반 페르소나와 달리 **해당 주제 폴더 안 `.claude/agents/`** 에 위치합니다 (위 [주제 전문가 자동 생성] 절 참고). 호출 방식은 동일합니다.
 
 ## 응답 언어
 
