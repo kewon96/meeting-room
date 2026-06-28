@@ -5,6 +5,8 @@
 | 날짜 | 주제 | 결정 요약 | 상세 링크 |
 |------|------|-----------|-----------|
 | 2026-05-25 | docker-swarm-vs-k8s | ECS Fargate 채택 (정부지원금 가산점 앱) | [ADR-0001](../topics/docker-swarm-vs-k8s/artifacts/ADR-0001-ECS-Fargate-채택.md) |
+| 2026-06-28 | platform-monitoring | dev 메트릭=AMP, 단계화(Phase1 같은계정 메트릭만) | [minutes](../topics/platform-monitoring/minutes/2026-06-28.md) |
+| 2026-06-28 | platform-monitoring | 번복(D3 단계화): dev부터 cross-account 직행, 같은계정 시작 거부 | [minutes](../topics/platform-monitoring/minutes/2026-06-28.md) |
 
 ## 작성 규칙
 - 결정이 **확정** 된 경우에만 등재 (잠정 합의는 등재하지 않음)
