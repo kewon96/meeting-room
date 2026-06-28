@@ -38,3 +38,34 @@
 - Claude: 틀렸다기보단 부정확. ①"Cluster=최상위 논리단위" 맞음(리전/계정이 위지만 ECS리소스 중엔 최상위, '논리적'도 정확). ②**"Cluster>Service>Task" 중첩은 부정확** — Service는 Task의 필수상위 아님. Task는 Service관리형 or standalone(RunTask) 둘 다 가능. Service/Task 모두 Cluster의 자식, Service는 컨트롤러지 크기계층 중간단계 아님. ③요소 누락: **Task Definition**(설계도)·**Container**(Task 안 실제 컨테이너, 가장 작은 단위). 제안 문장 + 비유(Cluster=울타리/TaskDef=레시피/Task=요리접시/Service=N접시 유지 매니저/Container=음식) 제공.
 - 사용자: 그럴바엔 Cluster·Service·Task·Task Definition 4개를 짧게 설명하는 게 낫겠다.
 - Claude: 슬라이드용 한 줄 정의 제공. TaskDef=설계도/레시피(JSON, 실행 안됨), Task=실제 실행단위(1+컨테이너 묶음, 함께 뜨고 죽음), Service=N개 유지 컨트롤러(재기동·롤링배포·오토스케일·LB연결), Cluster=Service/Task/컴퓨팅용량 묶는 최상위 논리경계. 관계도 + 발표멘트("설계도로 요리 만들고 매니저가 N개 유지, 울타리 안에서") 제공. Container는 발표깊이 따라 선택.
+
+### 발표자료 — Cloud Map 설명 3줄 검증
+- 사용자: Cloud Map 설명 3줄 중 틀린 거? ①알아보기 쉬운 이름 정의 ⇒ DNS ②Fargate는 Task마다 Private IP 새로 생성 ③Route53 껴서 DNS vs Private하게 DNS 선택 가능.
+- Claude: ②만 정확. **①은 등치 오류** — Cloud Map은 DNS가 아니라 서비스 디스커버리(Cloud Map ⊃ DNS). 조회수단 2가지: DNS 기반(Route53 레코드) + API 기반(DiscoverInstances, IP 없는 리소스도 등록·조회). **②맞음** — Fargate=awsvpc 모드 → 태스크마다 전용 ENI+Private IP, 교체 시 새 IP(=Cloud Map 필요 이유). **③은 거짓 이분법** — Private DNS도 Route53임. 실제 선택축: (1)DNS 네임스페이스 vs API 전용, (2)DNS면 Public vs Private(둘 다 Route53 호스팅영역). ECS 서비스 디스커버리는 보통 Private DNS. 올바른 표현="Public DNS로 외부노출 vs Private DNS(VPC 내부전용), 둘 다 내부적으로 Route53 생성".
+- 사용자: (취지 명확화) 슬라이드 의도는 "Fargate는 task 내릴 때마다 private IP가 달라지니, 네트워크 연결 위해 Cloud Map을 쓴다"를 알리려는 것.
+- Claude: 그 인과면 흐름 깔끔. 핵심 서사="IP가 바뀐다 → 고정 이름 필요 → Cloud Map(서비스 디스커버리, IP 갱신 자동추적)". 이렇게 짜면 ①의 "=>DNS"가 "서비스 디스커버리"로 자연 해소(단순 DNS면 IP 바뀔 때 누가 갱신?), ③도 Public/Private 단순화.
+- 사용자: 이건 Cloud Map 설명 페이지다.
+- Claude: 한 페이지 슬라이드 구성 제공 — 정의(변하지않는 이름→위치 자동추적 서비스 디스커버리)/왜필요(Fargate IP 가변)/동작(ECS가 등록·해제 자동반영)/조회2가지(DNS=Route53, API=DiscoverInstances)/보통 Private DNS. 발표멘트="뜰 때마다 IP 바뀌니 변하지 않는 이름으로 찾아주는 게 Cloud Map".
+
+### Cloud Map API 조회 방식 심화
+- 사용자: "API만 쓴다"는 게 무슨 의미?
+- Claude: 조회 메커니즘 차이. **DNS**=Cloud Map이 Route53 레코드로 변환→앱은 평범한 DNS질의(코드가 Cloud Map 몰라도 됨). **API 전용**=Route53 레코드 안 만듦(nslookup 안 됨)→앱이 SDK로 DiscoverInstances 직접 호출해 IP·포트·메타데이터 JSON 수신. API전용 쓰는 이유: IP없는 리소스(SQS·S3 등) 등록, 커스텀 속성 필터링(version=v2), DNS캐시(TTL) 회피·실시간 헬스. ECS 컨테이너 IP연결 목적이면 DNS(Private)가 정답. Spring비유: DNS=호스트네임 RestTemplate, API전용=Eureka 클라이언트 직접질의.
+- 사용자: gateway(EC2)→business(ECS+Fargate) 연결 시 DNS는 해봤고, API로도 되나?
+- Claude: 됨. Cloud Map API는 "전화번호부 조회"일 뿐 실제 연결은 직접(EC2→Fargate ENI 직결, VPC 내부). 흐름: ①DiscoverInstances 호출 ②살아있는 task IP목록 받음 ③직접 TCP연결. 필요: IAM(servicediscovery:DiscoverInstances) + SDK 코드 + 보안그룹(DNS와 동일). DNS 대비 떠안는 것: IP조회/로드밸런싱/캐싱·갱신을 코드가 직접(헬스필터 실시간은 장점). Spring비유: DNS=호스트네임 RestTemplate(인프라가 해결), API=Eureka/DiscoveryClient로 인스턴스목록 받아 @LoadBalanced로 호출(클라이언트사이드 디스커버리). 단순 연결이면 DNS 권장.
+
+### 실제 내부 구조 공유
+- 사용자: 실제 구조 = front-gateway(EC2) --[Cloud Map Private DNS]--> platform-gateway(ECS-Fargate) --[Cloud Map API]--> platform-business-server(ECS-Fargate). platform 두 구성은 같은 cluster의 서로 다른 service.
+- Claude: 토폴로지 정상·정석 패턴. 발표 전 짚을 2가지. ①**DNS→API 비대칭이 의도된 것인지** — API 쓰는 합당한 이유(메타데이터 라우팅/버전·카나리 태그 선택, 실시간 헬스필터, 기존 클라이언트사이드 디스커버리 로직)가 있으면 발표 포인트, 없으면 IAM+코드 부담만 지므로 DNS 통일이 단순. ②**business가 'API 전용 네임스페이스'인지 vs 'DNS 네임스페이스인데 API로 조회'인지** 구분 필요 — DNS 네임스페이스도 DiscoverInstances 가능하므로 API로 부른다고 API전용은 아님. 콘솔에서 네임스페이스 타입 확인 권장. (확인 필요 항목으로 남김)
+- 사용자: ①비대칭은 의도 아님(처음이라 몰랐음) ②business는 **API 전용 네임스페이스** 맞음.
+- Claude: 정리. **발표**=없는 이유 지어내지 말고 "platform-gateway→business는 API 기반 디스커버리 사용"으로 사실만. 오히려 한 시스템에 DNS·API 둘 다 있어 Cloud Map 예시로 풍부. **시스템**: 지금 전환 불필요 — Cloud Map **네임스페이스 타입은 생성 후 변경 불가**(API전용→DNS 전환 불가, 새 Private DNS 네임스페이스 생성+재등록+코드변경 필요한 재작업). 잘 돌면 유지, 향후 새 서비스는 Private DNS로 통일 권장. **단 API전용은 DNS가 자동 해주던 걸 코드가 떠안음 → platform-gateway 코드 점검 3가지**: ①결과 캐싱 ②로드밸런싱 ③헬스필터. (※ 이 조언은 다음 턴에서 정정됨 — Service Connect라 불필요)
+
+### AWS 실물 조사 — "권한 없는데 왜 되지?" → ECS Service Connect로 판명
+- 사용자: platform-gateway→server에 servicediscovery 권한 있어야 하지 않나? 근데 없는데? AWS 직접 봐줘. cluster=develop-active, service=art-wash.
+- Claude(AWS 조사): 실명 develop-art-wash-gateway / -server (account 897722674699, ap-northeast-2). 발견:
+  - **네임스페이스 2개**: `platform.local`(DNS_PRIVATE, ns-6dn4duy75ixipnc6) + `platform-services`(HTTP=API전용, ns-m4tjzmalggeadxca).
+  - gateway serviceRegistries → `art-wash.gateway`(platform.local DNS) 등록. **server serviceRegistries 비어 있음**.
+  - server는 HTTP 네임스페이스에 인스턴스 등록됨(192.168.2.57:8080, 속성에 **DeploymentId=task-set ARN**).
+  - gateway·server **동일 Task Role `art-wash-task-role`** — inline 정책 ecs-exec(ssmmessages)+s3 뿐, **servicediscovery 권한 0**. 사용자 말 맞음.
+  - gateway env: `SERVER_URL=http://art-wash-server:8080` (논리 이름).
+  - **결정타**: 양 서비스 `serviceConnectConfiguration.enabled=true` → namespace=HTTP(ns-m4tjz...), server clientAlias=`art-wash-server:8080`(env와 일치). task def 컨테이너는 `gateway` 1개뿐.
+- Claude(결론): **앱의 Cloud Map API 호출이 아니라 ECS Service Connect.** 흐름: 앱이 http://art-wash-server:8080 호출 → ECS가 런타임 주입한 **Envoy 프록시 사이드카**(task def엔 안 보임, 실행 task엔 ecs-service-connect-* 컨테이너로 존재)가 Cloud Map HTTP 네임스페이스 조회→LB→헬스체크 후 라우팅. 프록시는 **ECS 인프라 권한**으로 디스커버리 → **앱 Task Role엔 servicediscovery 권한 불필요**(없는 게 정상). **아까 캐싱/LB/헬스필터 코드점검 조언 정정** — Envoy가 자동 처리, 점검할 코드 없음. **정확한 토폴로지**: front-gateway(EC2, 메시 밖)→platform-gateway = ECS Service Discovery(DNS, platform.local), platform-gateway→server = ECS Service Connect(HTTP, platform-services). gateway가 DNS 네임스페이스에도 등록된 이유=EC2 클라이언트가 메시 밖이라 DNS 필요. **발표 정정**: "Cloud Map API 디스커버리"❌ → "ECS Service Connect(내부적으로 Cloud Map HTTP 네임스페이스 레지스트리 활용, Envoy가 디스커버리·LB·헬스 투명 처리)"✅.
